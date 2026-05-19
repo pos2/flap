@@ -7,7 +7,7 @@ ENV PORT=4173
 ENV DATA_DIR=/data
 
 COPY package.json ./
-COPY index.html display.html flap.html ./
+COPY index.html display.html flap.html gif.html ./
 COPY public ./public
 COPY scripts ./scripts
 COPY src ./src
