@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Split-Flap Display</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="display-shell">
+      <header class="display-toolbar">
+        <button class="control-button" id="play-display" type="button">Replay</button>
+        <button class="control-button" id="fast-display" type="button">FAST!!!</button>
+        <label class="display-toggle">
+          <input id="toggle-detail" type="checkbox" checked />
+          Detail
+        </label>
+      </header>
+      <aside class="detail-window" aria-label="Current flip detail">
+        <button class="detail-close" id="close-detail" type="button" aria-label="Close detail window">❌</button>
+        <canvas id="detail-canvas" aria-label="Magnified active flip area"></canvas>
+      </aside>
+      <canvas id="display-canvas" aria-label="Generated split-flap display"></canvas>
+    </main>
+    <script type="module" src="/src/display.js"></script>
+  </body>
+</html>

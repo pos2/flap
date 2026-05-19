@@ -1,0 +1,14 @@
+services:
+  flap:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-4173}:4173"
+    environment:
+      PORT: 4173
+      DATA_DIR: /data
+    volumes:
+      - flap-data:/data
+
+volumes:
+  flap-data:

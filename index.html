@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image to ASCII</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="ascii-tool" aria-label="Image to ASCII converter">
+        <div class="ascii-input">
+          <label class="drop-zone" id="drop-area">
+            <input type="file" id="image-file" accept="image/*" />
+            <span>Choose Image</span>
+          </label>
+
+          <div class="preview-box">
+            <canvas id="image-preview" width="320" height="180" aria-label="Processed image preview"></canvas>
+          </div>
+        </div>
+
+        <div class="ascii-controls" aria-label="ASCII preprocessing controls">
+          <label>
+            <span>Characters</span>
+            <input id="ascii-width" type="range" min="24" max="240" value="96" />
+            <output id="ascii-width-value">96</output>
+          </label>
+
+          <label>
+            <span>Font</span>
+            <select id="display-font">
+              <option value="signpainter">SignPainter</option>
+              <option value="arial-narrow">Arial Narrow</option>
+              <option value="courier">Courier</option>
+              <option value="georgia">Georgia</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Dither</span>
+            <select id="dithering">
+              <option value="none">None</option>
+              <option value="FloydSteinberg">Floyd</option>
+              <option value="Atkinson">Atkinson</option>
+              <option value="JJN">JJN</option>
+              <option value="Stucki">Stucki</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Brightness</span>
+            <input id="brightness" type="range" min="0" max="220" value="100" />
+            <output id="brightness-value">100</output>
+          </label>
+
+          <label>
+            <span>Contrast</span>
+            <input id="contrast" type="range" min="0" max="220" value="100" />
+            <output id="contrast-value">100</output>
+          </label>
+
+          <label>
+            <span>Saturation</span>
+            <input id="saturation" type="range" min="0" max="220" value="100" />
+            <output id="saturation-value">100</output>
+          </label>
+
+          <label>
+            <span>Sepia</span>
+            <input id="sepia" type="range" min="0" max="100" value="0" />
+            <output id="sepia-value">0</output>
+          </label>
+
+          <label>
+            <span>Hue</span>
+            <input id="hue" type="range" min="-180" max="180" value="0" />
+            <output id="hue-value">0</output>
+          </label>
+
+          <label>
+            <span>Grayscale</span>
+            <input id="grayscale" type="range" min="0" max="100" value="0" />
+            <output id="grayscale-value">0</output>
+          </label>
+
+          <label>
+            <span>Invert</span>
+            <input id="invert" type="range" min="0" max="100" value="0" />
+            <output id="invert-value">0</output>
+          </label>
+
+          <label>
+            <span>Spaces</span>
+            <input id="space-density" type="range" min="0" max="8" value="1" />
+            <output id="space-density-value">1</output>
+          </label>
+
+          <label>
+            <span>Frame</span>
+            <input id="transparent-frame" type="range" min="0" max="16" value="0" />
+            <output id="transparent-frame-value">0</output>
+          </label>
+
+          <label class="checkbox-control">
+            <input id="use-sharpen" type="checkbox" />
+            <span>Sharpen</span>
+          </label>
+
+          <label>
+            <span>Sharpness</span>
+            <input id="sharpness" type="range" min="1" max="18" value="9" disabled />
+            <output id="sharpness-value">9</output>
+          </label>
+
+          <label class="checkbox-control">
+            <input id="use-threshold" type="checkbox" />
+            <span>Threshold</span>
+          </label>
+
+          <label>
+            <span>Threshold</span>
+            <input id="threshold-offset" type="range" min="0" max="255" value="128" disabled />
+            <output id="threshold-offset-value">128</output>
+          </label>
+
+          <label class="checkbox-control">
+            <input id="use-edge-detection" type="checkbox" />
+            <span>Edges</span>
+          </label>
+
+          <label>
+            <span>Edge</span>
+            <input id="edge-intensity" type="range" min="1" max="5" step="0.1" value="1" disabled />
+            <output id="edge-intensity-value">1</output>
+          </label>
+
+          <button class="control-button" id="reset-ascii" type="button">Reset</button>
+          <button class="control-button" id="save-ascii-default" type="button">Save Default</button>
+          <button class="control-button" id="save-share-display" type="button">Save & Share</button>
+          <button class="control-button" id="open-display" type="button">Open Display</button>
+          <output class="share-status" id="share-status"></output>
+        </div>
+
+        <pre id="ascii-output" aria-label="ASCII output"></pre>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

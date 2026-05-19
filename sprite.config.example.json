@@ -1,0 +1,14 @@
+{
+  "chars": " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#%*=.,+-:/&_'\",()[]",
+  "fontFamily": "Arial Narrow, Arial, Helvetica, sans-serif",
+  "fontSize": 42,
+  "fontWeight": "700",
+  "color": "#f2f4e8",
+  "background": "transparent",
+  "cellWidth": 48,
+  "cellHeight": 64,
+  "columns": 16,
+  "verticalOffset": 0,
+  "output": "public/assets/flap-glyphs.svg",
+  "metadata": "public/assets/flap-glyphs.json"
+}

@@ -1,0 +1,29 @@
+{
+  "default": "signpainter",
+  "sprites": [
+    {
+      "id": "signpainter",
+      "label": "SignPainter",
+      "image": "/public/assets/sprites/signpainter.svg",
+      "metadata": "/public/assets/sprites/signpainter.json"
+    },
+    {
+      "id": "arial-narrow",
+      "label": "Arial Narrow",
+      "image": "/public/assets/sprites/arial-narrow.svg",
+      "metadata": "/public/assets/sprites/arial-narrow.json"
+    },
+    {
+      "id": "courier",
+      "label": "Courier New",
+      "image": "/public/assets/sprites/courier.svg",
+      "metadata": "/public/assets/sprites/courier.json"
+    },
+    {
+      "id": "georgia",
+      "label": "Georgia",
+      "image": "/public/assets/sprites/georgia.svg",
+      "metadata": "/public/assets/sprites/georgia.json"
+    }
+  ]
+}

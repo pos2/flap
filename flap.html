@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Split-Flap Preview</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="flap-stage" aria-label="Single split-flap board demo">
+        <canvas id="flap" width="520" height="520" aria-label="A to Z flip animation"></canvas>
+        <div class="controls" aria-label="Preview controls">
+          <label class="font-picker">
+            <span>Font</span>
+            <select id="font-select"></select>
+          </label>
+          <button class="control-button" id="reload" type="button">Reload</button>
+          <button class="control-button" id="replay" type="button">Replay</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/flap.js"></script>
+  </body>
+</html>
