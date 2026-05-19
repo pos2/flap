@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 
@@ -9,7 +9,8 @@ const root = process.cwd();
 const port = Number(process.env.PORT || 4173);
 const dataDir = process.env.DATA_DIR || path.join(root, "data");
 const displaysPath = path.join(dataDir, "displays.json");
-const maxBodyBytes = 2 * 1024 * 1024;
+const frameDataDir = path.join(dataDir, "display-frames");
+const maxBodyBytes = 16 * 1024 * 1024;
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -97,13 +98,17 @@ async function saveDisplay(request, response) {
 
   const id = crypto.randomUUID();
   const record = {
-    ...payload,
+    ...payload.record,
     id,
     createdAt: Date.now(),
   };
   const displays = await readDisplays();
   displays[id] = record;
   await writeDisplays(displays);
+
+  if (payload.frames) {
+    await writeDisplayFrames(id, payload.frames);
+  }
 
   sendJson(response, 201, record);
 }
@@ -113,9 +118,11 @@ async function listDisplays(response) {
   const records = Object.values(displays)
     .map((record) => ({
       id: record.id,
+      type: record.type || "image",
       width: record.width,
       height: record.height,
       font: record.font,
+      frameCount: record.frameCount || null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt || null,
     }))
@@ -133,6 +140,14 @@ async function getDisplay(response, id) {
     return;
   }
 
+  if (record.type === "animation") {
+    sendJson(response, 200, {
+      ...record,
+      frames: await readDisplayFrames(id),
+    });
+    return;
+  }
+
   sendJson(response, 200, record);
 }
 
@@ -146,6 +161,11 @@ async function deleteDisplay(response, id) {
 
   delete displays[id];
   await writeDisplays(displays);
+
+  try {
+    await unlink(getFramesPath(id));
+  } catch {}
+
   sendJson(response, 200, { ok: true, id });
 }
 
@@ -188,22 +208,58 @@ function validateDisplayPayload(payload) {
     throw new Error("Invalid height");
   }
 
+  if (payload?.type === "animation") {
+    const frames = validateAnimationFrames(payload.frames, width, height);
+
+    return {
+      record: {
+        type: "animation",
+        width,
+        height,
+        font: typeof payload.font === "string" ? payload.font : "signpainter",
+        frameCount: frames.length,
+        frameDuration: Number(payload.frameDuration) || 180,
+        settings: sanitizeSettings(payload.settings),
+      },
+      frames,
+    };
+  }
+
   if (!Array.isArray(payload.rows) || payload.rows.length !== height) {
     throw new Error("Invalid rows");
   }
-
   const rows = payload.rows.map((row) => {
     if (typeof row !== "string") throw new Error("Invalid row");
     return row.slice(0, width).padEnd(width, " ");
   });
 
   return {
-    width,
-    height,
-    rows,
-    font: typeof payload.font === "string" ? payload.font : "signpainter",
-    settings: sanitizeSettings(payload.settings),
+    record: {
+      type: "image",
+      width,
+      height,
+      rows,
+      font: typeof payload.font === "string" ? payload.font : "signpainter",
+      settings: sanitizeSettings(payload.settings),
+    },
   };
+}
+
+function validateAnimationFrames(frames, width, height) {
+  if (!Array.isArray(frames) || frames.length < 1 || frames.length > 120) {
+    throw new Error("Invalid animation frames");
+  }
+
+  return frames.map((frame) => {
+    if (!Array.isArray(frame) || frame.length !== height) {
+      throw new Error("Invalid animation frame");
+    }
+
+    return frame.map((row) => {
+      if (typeof row !== "string") throw new Error("Invalid animation row");
+      return row.slice(0, width).padEnd(width, " ");
+    });
+  });
 }
 
 function sanitizeSettings(settings) {
@@ -233,6 +289,24 @@ async function readDisplays() {
 async function writeDisplays(displays) {
   await mkdir(dataDir, { recursive: true });
   await writeFile(displaysPath, JSON.stringify(displays, null, 2));
+}
+
+async function readDisplayFrames(id) {
+  try {
+    const parsed = JSON.parse(await readFile(getFramesPath(id), "utf8"));
+    return Array.isArray(parsed.frames) ? parsed.frames : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeDisplayFrames(id, frames) {
+  await mkdir(frameDataDir, { recursive: true });
+  await writeFile(getFramesPath(id), JSON.stringify({ frames }), "utf8");
+}
+
+function getFramesPath(id) {
+  return path.join(frameDataDir, `${id}.json`);
 }
 
 function sendJson(response, status, body) {

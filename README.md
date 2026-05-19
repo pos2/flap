@@ -62,7 +62,7 @@ API routes:
 - `GET /api/displays/:id`: load a saved display payload.
 - `DELETE /api/displays/:id`: delete a saved display.
 
-Saved displays are written to `data/displays.json` by default. Override with `DATA_DIR=/path/to/data`.
+Saved display metadata is written to `data/displays.json` by default. Animation frame data is stored separately under `data/display-frames/<id>.json`, so large frame arrays do not bloat the management index. Override the data root with `DATA_DIR=/path/to/data`.
 
 ## Docker
 

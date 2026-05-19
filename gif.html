@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GIF to ASCII Frames</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="gif-tool" aria-label="GIF to ASCII frame converter">
+        <div class="gif-input">
+          <label class="drop-zone" id="gif-drop-area">
+            <input type="file" id="gif-file" accept="image/gif,image/webp" />
+            <span>Choose GIF</span>
+          </label>
+
+          <div class="preview-box">
+            <canvas id="gif-preview" width="320" height="180" aria-label="Selected GIF frame preview"></canvas>
+          </div>
+
+          <div class="gif-status" id="gif-status">No GIF loaded</div>
+        </div>
+
+        <div class="ascii-controls" aria-label="GIF preprocessing controls">
+          <label>
+            <span>Characters</span>
+            <input id="gif-width" type="range" min="24" max="180" value="96" />
+            <output id="gif-width-value">96</output>
+          </label>
+
+          <label>
+            <span>Font</span>
+            <select id="gif-font">
+              <option value="signpainter">SignPainter</option>
+              <option value="arial-narrow">Arial Narrow</option>
+              <option value="courier">Courier</option>
+              <option value="georgia">Georgia</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Frames</span>
+            <input id="gif-max-frames" type="range" min="4" max="48" value="24" />
+            <output id="gif-max-frames-value">24</output>
+          </label>
+
+          <label>
+            <span>Difference</span>
+            <input id="gif-min-diff" type="range" min="0" max="40" value="6" />
+            <output id="gif-min-diff-value">6</output>
+          </label>
+
+          <label>
+            <span>Dither</span>
+            <select id="gif-dithering">
+              <option value="none">None</option>
+              <option value="FloydSteinberg">Floyd</option>
+              <option value="Atkinson">Atkinson</option>
+              <option value="JJN">JJN</option>
+              <option value="Stucki">Stucki</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Brightness</span>
+            <input id="gif-brightness" type="range" min="0" max="220" value="100" />
+            <output id="gif-brightness-value">100</output>
+          </label>
+
+          <label>
+            <span>Contrast</span>
+            <input id="gif-contrast" type="range" min="0" max="220" value="100" />
+            <output id="gif-contrast-value">100</output>
+          </label>
+
+          <label>
+            <span>Saturation</span>
+            <input id="gif-saturation" type="range" min="0" max="220" value="100" />
+            <output id="gif-saturation-value">100</output>
+          </label>
+
+          <label>
+            <span>Grayscale</span>
+            <input id="gif-grayscale" type="range" min="0" max="100" value="0" />
+            <output id="gif-grayscale-value">0</output>
+          </label>
+
+          <label>
+            <span>Invert</span>
+            <input id="gif-invert" type="range" min="0" max="100" value="0" />
+            <output id="gif-invert-value">0</output>
+          </label>
+
+          <label>
+            <span>Spaces</span>
+            <input id="gif-space-density" type="range" min="0" max="8" value="1" />
+            <output id="gif-space-density-value">1</output>
+          </label>
+
+          <label class="checkbox-control">
+            <input id="gif-use-threshold" type="checkbox" />
+            <span>Threshold</span>
+          </label>
+
+          <label>
+            <span>Threshold</span>
+            <input id="gif-threshold-offset" type="range" min="0" max="255" value="128" disabled />
+            <output id="gif-threshold-offset-value">128</output>
+          </label>
+
+          <button class="control-button" id="preview-gif-display" type="button">Preview Animation</button>
+          <button class="control-button" id="save-share-gif" type="button">Save & Share</button>
+          <output class="share-status" id="gif-preview-status"></output>
+        </div>
+
+        <section class="gif-frame-list" id="gif-frame-list" aria-label="Extracted ASCII keyframes"></section>
+      </section>
+    </main>
+    <script type="module" src="/src/gif.js"></script>
+  </body>
+</html>

@@ -36,6 +36,9 @@ const DETAIL_TILE_WIDTH = 18;
 const DETAIL_GAP = 2;
 const MAIN_GAP = 1;
 const FINAL_RENDER_SCALE = 4;
+const ANIMATION_FRAME_DURATION = 180;
+const ANIMATION_BLOCK_FLIP_DURATION = 760;
+const ANIMATION_BLOCK_BATCH_SIZE = 3;
 
 const canvas = document.querySelector("#display-canvas");
 const detailCanvas = document.querySelector("#detail-canvas");
@@ -45,6 +48,9 @@ const ctx = canvas.getContext("2d");
 const detailCtx = detailCanvas.getContext("2d");
 const playButton = document.querySelector("#play-display");
 const fastButton = document.querySelector("#fast-display");
+const pauseButton = document.querySelector("#pause-animation");
+const speedInput = document.querySelector("#animation-speed");
+const speedValue = document.querySelector("#animation-speed-value");
 const detailToggle = document.querySelector("#toggle-detail");
 const closeDetailButton = document.querySelector("#close-detail");
 
@@ -55,8 +61,16 @@ const state = {
   glyphOrder: [],
   glyphIndex: new Map(),
   targetIndexes: [],
+  targetRows: [],
   scanSteps: [],
   startTime: 0,
+  frameTransition: null,
+  currentFrameIndex: 0,
+  frameDirection: 1,
+  nextFrameAt: 0,
+  isPaused: false,
+  pausedAt: 0,
+  animationSpeed: 1,
   animationId: null,
   mainTileWidth: 6,
   mainTileHeight: 9,
@@ -85,12 +99,18 @@ async function init() {
   state.image = image;
   state.glyphOrder = [...DISPLAY_CHAR_ORDER].filter((char) => metadata.glyphs[char]);
   state.glyphOrder.forEach((char, index) => state.glyphIndex.set(char, index));
+  state.targetRows = getInitialRows();
   state.targetIndexes = createTargetIndexes();
   state.blockRanges = createBlockRanges();
   state.scanSteps = createScanSteps();
 
   playButton.addEventListener("click", replay);
   fastButton.addEventListener("click", skipToFinal);
+  pauseButton.addEventListener("click", toggleAnimationPause);
+  speedInput.addEventListener("input", () => {
+    state.animationSpeed = Number(speedInput.value) || 1;
+    speedValue.textContent = `${state.animationSpeed.toFixed(1)}x`;
+  });
   detailToggle.addEventListener("change", () => {
     setDetailVisible(detailToggle.checked);
   });
@@ -105,6 +125,11 @@ async function init() {
   window.addEventListener("resize", () => {
     refreshLayout();
   });
+
+  shell.classList.toggle("animation-mode", isAnimationPayload());
+  if (isAnimationPayload()) {
+    setDetailVisible(false);
+  }
 
   setupCanvases();
   replay();
@@ -147,6 +172,24 @@ function normalizePayload(payload) {
     };
   }
 
+  if (payload?.type === "animation" && payload?.width > 0 && payload?.height > 0 && Array.isArray(payload.frames)) {
+    const frames = payload.frames
+      .filter((frame) => Array.isArray(frame))
+      .map((frame) => frame.map((row) => String(row).slice(0, payload.width).padEnd(payload.width, " ")))
+      .filter((frame) => frame.length === payload.height);
+
+    if (frames.length > 0) {
+      return {
+        ...payload,
+        type: "animation",
+        font: FONT_ASSETS[payload.font] ? payload.font : DEFAULT_FONT,
+        frameDuration: Number(payload.frameDuration) || ANIMATION_FRAME_DURATION,
+        rows: frames[0],
+        frames,
+      };
+    }
+  }
+
   return null;
 }
 
@@ -154,8 +197,20 @@ function getFontAssets(font) {
   return FONT_ASSETS[font] || FONT_ASSETS[DEFAULT_FONT];
 }
 
-function createTargetIndexes() {
-  return state.payload.rows.map((row) =>
+function getInitialRows() {
+  return isAnimationPayload() ? state.payload.frames[0] : state.payload.rows;
+}
+
+function isAnimationPayload() {
+  return state.payload.type === "animation" && Array.isArray(state.payload.frames);
+}
+
+function createBlankRows() {
+  return Array.from({ length: state.payload.height }, () => " ".repeat(state.payload.width));
+}
+
+function createTargetIndexes(rows = state.targetRows) {
+  return rows.map((row) =>
     [...row].map((char) => state.glyphIndex.get(char) ?? state.glyphIndex.get(" ")),
   );
 }
@@ -219,8 +274,16 @@ function setupCanvases() {
   const width = state.payload.width;
   const height = state.payload.height;
   const availableWidth = Math.max(320, window.innerWidth - 32);
+  const toolbarHeight = document.querySelector(".display-toolbar")?.offsetHeight || 0;
+  const availableHeight = Math.max(240, window.innerHeight - toolbarHeight - 48);
   const tileByWidth = (availableWidth - (width - 1) * MAIN_GAP) / width;
+  const tileByHeight = (availableHeight - (height - 1) * MAIN_GAP) / (height * state.tileRatio);
   state.mainTileWidth = Math.max(1.5, tileByWidth);
+
+  if (isAnimationPayload()) {
+    state.mainTileWidth = Math.max(1.5, Math.min(tileByWidth, tileByHeight));
+  }
+
   state.mainTileHeight = state.mainTileWidth * state.tileRatio;
   state.detailTileHeight = DETAIL_TILE_WIDTH * state.tileRatio;
   state.mainWidth = Math.ceil(width * state.mainTileWidth + (width - 1) * MAIN_GAP);
@@ -238,7 +301,7 @@ function refreshLayout() {
   setupCanvases();
   resetCompletedLayer();
   draw(performance.now());
-  if (state.animationId === null && isComplete(performance.now())) {
+  if (!isAnimationPayload() && state.animationId === null && isComplete(performance.now())) {
     renderFinalHighRes();
   }
 }
@@ -249,6 +312,25 @@ function replay() {
   }
 
   setMainCanvasScale(1);
+  state.isPaused = false;
+  state.pausedAt = 0;
+  pauseButton.textContent = "Pause";
+  state.frameTransition = null;
+  state.targetRows = getInitialRows();
+  state.targetIndexes = createTargetIndexes();
+  state.blockRanges = createBlockRanges();
+  state.scanSteps = createScanSteps();
+
+  if (isAnimationPayload()) {
+    state.currentFrameIndex = -1;
+    state.frameDirection = 1;
+    state.targetRows = createBlankRows();
+    state.targetIndexes = createTargetIndexes(state.targetRows);
+    startNineBlockTransition(createBlankRows(), state.payload.frames[0], 0, performance.now() + START_DELAY);
+    state.animationId = requestAnimationFrame(animationTick);
+    return;
+  }
+
   state.startTime = performance.now() + START_DELAY;
   resetCompletedLayer();
   draw(performance.now());
@@ -261,11 +343,34 @@ function skipToFinal() {
     state.animationId = null;
   }
 
+  if (isAnimationPayload()) {
+    startAnimationLoop(performance.now());
+    return;
+  }
+
   flushCompletedTiles(state.scanSteps.length - 1);
   state.detailCenter = state.scanSteps.at(-1) || { row: 0, col: 0 };
   renderFinalHighRes();
   if (state.detailVisible) {
     drawDetail(state.scanSteps.length * STEP_INTERVAL + FLIP_DURATION + 1);
+  }
+}
+
+function toggleAnimationPause() {
+  if (!isAnimationPayload()) return;
+
+  state.isPaused = !state.isPaused;
+  pauseButton.textContent = state.isPaused ? "Resume" : "Pause";
+
+  if (state.isPaused) {
+    state.pausedAt = performance.now();
+    return;
+  }
+
+  const pauseDuration = performance.now() - state.pausedAt;
+  state.nextFrameAt += pauseDuration;
+  if (state.frameTransition) {
+    state.frameTransition.startTime += pauseDuration;
   }
 }
 
@@ -298,8 +403,173 @@ function tick(now) {
   if (!isComplete(now)) {
     state.animationId = requestAnimationFrame(tick);
   } else {
-    state.animationId = null;
-    renderFinalHighRes();
+    if (isAnimationPayload()) {
+      startAnimationLoop(now);
+    } else {
+      state.animationId = null;
+      renderFinalHighRes();
+    }
+  }
+}
+
+function startAnimationLoop(now) {
+  state.currentFrameIndex = 0;
+  state.frameDirection = 1;
+  state.targetRows = state.payload.frames[0];
+  state.targetIndexes = createTargetIndexes();
+  state.frameTransition = null;
+  state.nextFrameAt = now + state.payload.frameDuration;
+  drawRowsStatic(state.targetRows);
+  if (state.detailVisible) drawAnimationDetail(state.targetRows);
+  state.animationId = requestAnimationFrame(animationTick);
+}
+
+function animationTick(now) {
+  if (state.isPaused) {
+    state.animationId = requestAnimationFrame(animationTick);
+    return;
+  }
+
+  if (!state.frameTransition && now >= state.nextFrameAt) {
+    const nextIndex = getNextAnimationFrameIndex();
+    const fromRows = state.payload.frames[state.currentFrameIndex];
+    const toRows = state.payload.frames[nextIndex];
+    startNineBlockTransition(fromRows, toRows, nextIndex, now);
+  }
+
+  if (state.frameTransition) {
+    drawAnimationTransition(state.frameTransition, now);
+
+    if (isNineBlockTransitionComplete(state.frameTransition, now)) {
+      state.currentFrameIndex = state.frameTransition.nextIndex;
+      state.targetRows = state.frameTransition.toRows;
+      state.targetIndexes = createTargetIndexes();
+      state.frameTransition = null;
+      state.nextFrameAt = now + state.payload.frameDuration;
+      drawRowsStatic(state.targetRows);
+      if (state.detailVisible) drawAnimationDetail(state.targetRows);
+    }
+  } else {
+    drawRowsStatic(state.targetRows);
+    if (state.detailVisible) drawAnimationDetail(state.targetRows);
+  }
+
+  state.animationId = requestAnimationFrame(animationTick);
+}
+
+function getNextAnimationFrameIndex() {
+  if (state.payload.frames.length <= 1) return 0;
+
+  let nextIndex = state.currentFrameIndex + state.frameDirection;
+
+  if (nextIndex >= state.payload.frames.length) {
+    state.frameDirection = -1;
+    nextIndex = state.payload.frames.length - 2;
+  } else if (nextIndex < 0) {
+    state.frameDirection = 1;
+    nextIndex = 1;
+  }
+
+  return nextIndex;
+}
+
+function startNineBlockTransition(fromRows, toRows, nextIndex, startTime) {
+  state.frameTransition = {
+    nextIndex,
+    fromRows,
+    toRows,
+    batches: createNineBlockBatches(fromRows, toRows),
+    startTime,
+  };
+  drawRowsStatic(fromRows);
+  if (state.detailVisible) drawAnimationDetail(fromRows);
+}
+
+function createNineBlockBatches(fromRows, toRows) {
+  const blocks = [];
+
+  for (let blockRow = 0; blockRow < 3; blockRow += 1) {
+    for (let blockCol = 0; blockCol < 3; blockCol += 1) {
+      const rowStart = Math.floor((state.payload.height * blockRow) / 3);
+      const rowEnd = Math.floor((state.payload.height * (blockRow + 1)) / 3);
+      const colStart = Math.floor((state.payload.width * blockCol) / 3);
+      const colEnd = Math.floor((state.payload.width * (blockCol + 1)) / 3);
+      const cells = [];
+
+      for (let row = rowStart; row < rowEnd; row += 1) {
+        for (let col = colStart; col < colEnd; col += 1) {
+          if ((fromRows[row]?.[col] || " ") !== (toRows[row]?.[col] || " ")) {
+            cells.push({ row, col });
+          }
+        }
+      }
+
+      blocks.push({ cells });
+    }
+  }
+
+  const shuffled = shuffle(blocks);
+  const batches = [];
+
+  for (let index = 0; index < shuffled.length; index += ANIMATION_BLOCK_BATCH_SIZE) {
+    batches.push(shuffled.slice(index, index + ANIMATION_BLOCK_BATCH_SIZE).flatMap((block) => block.cells));
+  }
+
+  return batches;
+}
+
+function isNineBlockTransitionComplete(transition, now) {
+  return now >= transition.startTime + transition.batches.length * getAnimationBlockFlipDuration();
+}
+
+function drawAnimationTransition(transition, now) {
+  const elapsed = now - transition.startTime;
+  const batchDuration = getAnimationBlockFlipDuration();
+  const activeBatch = Math.floor(elapsed / batchDuration);
+  const progress = easeInOutCubic(clamp((elapsed - activeBatch * batchDuration) / batchDuration, 0, 1));
+
+  ctx.clearRect(0, 0, state.mainWidth, state.mainHeight);
+  drawRowsStatic(transition.fromRows, ctx, false);
+
+  for (let batchIndex = 0; batchIndex < transition.batches.length; batchIndex += 1) {
+    const batch = transition.batches[batchIndex];
+
+    if (batchIndex < activeBatch) {
+      drawAnimationCellsStatic(transition.toRows, batch, ctx, state.mainTileWidth, state.mainTileHeight, MAIN_GAP);
+    } else if (batchIndex === activeBatch) {
+      drawAnimationCellsFlipping(transition, batch, progress, ctx, state.mainTileWidth, state.mainTileHeight, MAIN_GAP);
+    }
+  }
+
+  if (state.detailVisible) drawAnimationDetail(transition.toRows, transition, activeBatch, progress);
+}
+
+function getAnimationBlockFlipDuration() {
+  return ANIMATION_BLOCK_FLIP_DURATION / state.animationSpeed;
+}
+
+function drawAnimationCellsStatic(rows, cells, targetCtx, tileWidth, tileHeight, gap) {
+  for (const cell of cells) {
+    const x = cell.col * (tileWidth + gap);
+    const y = cell.row * (tileHeight + gap);
+    drawStaticTile(targetCtx, x, y, tileWidth, tileHeight, rows[cell.row]?.[cell.col] || " ");
+  }
+}
+
+function drawAnimationCellsFlipping(transition, cells, progress, targetCtx, tileWidth, tileHeight, gap) {
+  for (const cell of cells) {
+    const x = cell.col * (tileWidth + gap);
+    const y = cell.row * (tileHeight + gap);
+    drawFlipTile(
+      targetCtx,
+      x,
+      y,
+      tileWidth,
+      tileHeight,
+      transition.fromRows[cell.row]?.[cell.col] || " ",
+      transition.toRows[cell.row]?.[cell.col] || " ",
+      progress,
+    );
   }
 }
 
@@ -349,6 +619,76 @@ function flushCompletedTiles(completedUntil) {
   }
 
   state.completedUntil = completedUntil;
+}
+
+function drawRowsStatic(rows, targetCtx = ctx, shouldClear = true) {
+  if (shouldClear) {
+    targetCtx.clearRect(0, 0, state.mainWidth, state.mainHeight);
+    targetCtx.fillStyle = "#f8fafc";
+    targetCtx.fillRect(0, 0, state.mainWidth, state.mainHeight);
+  }
+
+  for (let row = 0; row < state.payload.height; row += 1) {
+    for (let col = 0; col < state.payload.width; col += 1) {
+      const x = col * (state.mainTileWidth + MAIN_GAP);
+      const y = row * (state.mainTileHeight + MAIN_GAP);
+      drawStaticTile(targetCtx, x, y, state.mainTileWidth, state.mainTileHeight, rows[row]?.[col] || " ");
+    }
+  }
+}
+
+function drawAnimationDetail(rows, transition = null, activeBatch = -1, progress = 1) {
+  const startCol = 0;
+  const startRow = 0;
+
+  detailCtx.clearRect(0, 0, detailCanvas.width, detailCanvas.height);
+  detailCtx.fillStyle = "#f8fafc";
+  detailCtx.fillRect(0, 0, detailCanvas.width, detailCanvas.height);
+
+  for (let rowOffset = 0; rowOffset < DETAIL_ROWS; rowOffset += 1) {
+    for (let colOffset = 0; colOffset < DETAIL_COLUMNS; colOffset += 1) {
+      const row = startRow + rowOffset;
+      const col = startCol + colOffset;
+      const x = colOffset * (DETAIL_TILE_WIDTH + DETAIL_GAP);
+      const y = rowOffset * (state.detailTileHeight + DETAIL_GAP);
+
+      if (row >= state.payload.height || col >= state.payload.width) {
+        drawTileBackground(detailCtx, x, y, DETAIL_TILE_WIDTH, state.detailTileHeight);
+        continue;
+      }
+
+      const cellBatch = transition ? getCellBatchIndex(transition.batches, row, col) : -1;
+
+      if (transition && cellBatch === activeBatch) {
+        drawFlipTile(
+          detailCtx,
+          x,
+          y,
+          DETAIL_TILE_WIDTH,
+          state.detailTileHeight,
+          transition.fromRows[row]?.[col] || " ",
+          transition.toRows[row]?.[col] || " ",
+          progress,
+        );
+      } else if (transition && cellBatch >= 0 && cellBatch < activeBatch) {
+        drawStaticTile(detailCtx, x, y, DETAIL_TILE_WIDTH, state.detailTileHeight, transition.toRows[row]?.[col] || " ");
+      } else if (transition) {
+        drawStaticTile(detailCtx, x, y, DETAIL_TILE_WIDTH, state.detailTileHeight, transition.fromRows[row]?.[col] || " ");
+      } else {
+        drawStaticTile(detailCtx, x, y, DETAIL_TILE_WIDTH, state.detailTileHeight, rows[row]?.[col] || " ");
+      }
+    }
+  }
+}
+
+function getCellBatchIndex(batches, row, col) {
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    if (batches[batchIndex].some((cell) => cell.row === row && cell.col === col)) {
+      return batchIndex;
+    }
+  }
+
+  return -1;
 }
 
 function drawDetail(elapsed) {
@@ -576,7 +916,18 @@ function drawGlyphHalf(targetCtx, char, half, dx, dy, dw, dh) {
 }
 
 function getTargetChar(row, col) {
-  return state.payload.rows[row]?.[col] || " ";
+  return state.targetRows[row]?.[col] || " ";
+}
+
+function shuffle(items) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
 }
 
 function clamp(value, min, max) {
